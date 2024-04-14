@@ -10,10 +10,11 @@ RUN pip install tensorboardX==1.6.0
 RUN mkdir -p /opt/workspace
 
 WORKDIR /opt/workspace/src
-ADD mnist.py /opt/workspace/src/mnist.py
+ADD benchmark_resnet.py /opt/workspace/src/benchmark_resnet.py
 ADD benchmark_resnet_imagenet_localstorage.py /opt/workspace/src/benchmark_resnet_imagenet_localstorage.py
 ADD benchmark_resnet_imagenet.py /opt/workspace/src/benchmark_resnet_imagenet.py
-ADD benchmark_resnet.py /opt/workspace/src/benchmark_resnet.py
+ADD mnist.py /opt/workspace/src/mnist.pytorch
+
 
 
 RUN  chgrp -R 0 /opt/workspace \

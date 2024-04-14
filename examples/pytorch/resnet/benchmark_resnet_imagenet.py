@@ -50,10 +50,9 @@ def train(args, model, device, train_loader, epoch, writer):
     else:
         print("Use real data ...")
         for batch_idx, (data, target) in enumerate(train_loader):
+            data, target = data.to(device, non_blocking=args.pin_memory), target.to(device, non_blocking=args.pin_memory)
             # Attach tensors to the device.
-            data, target = data.to(device), target.to(device)
-
-            for r in range(args.repeat):
+            for r in range(args.repeat):                
                 optimizer.zero_grad()
                 output = model(data)
                 loss = F.cross_entropy(output, target)
@@ -88,7 +87,7 @@ def test(model, device, test_loader, writer, epoch):
     with torch.no_grad():
         for data, target in test_loader:
             # Attach tensors to the device.
-            data, target = data.to(device), target.to(device)
+            data, target = data.to(device, non_blocking=args.pin_memory), target.to(device, non_blocking=args.pin_memory)
 
             output = model(data)
             # Get the index of the max log-probability.
@@ -178,6 +177,24 @@ def main():
         help="For Saving the current Model",
     )
     parser.add_argument(
+        "--pin-memory",
+        action="store_true",
+        default=False,
+        help="For automatically put the fetched data Tensors in pinned memory",
+    )
+    parser.add_argument(
+        "--persistent-workers",
+        action="store_true",
+        default=False,
+        help="The data loader will not shutdown the worker processes after a dataset has been consumed once",
+    )
+    parser.add_argument(
+        "--prefetch-factor",
+        type=int,
+        default=2,
+        help="Number of batches loaded in advance by each worker.",
+    )
+    parser.add_argument(
         "--dir",
         default="logs",
         metavar="L",
@@ -196,6 +213,12 @@ def main():
         action="store_true",
         default=False,
         help="Use synthetic data for training",
+    )
+    parser.add_argument(
+        "--use-transform",
+        action="store_true",
+        default=False,
+        help="Use data transformation for training",
     )
     parser.add_argument(
         "--num-syn-batches",
@@ -258,36 +281,64 @@ def main():
             command_unzip = ['unzip', args.dataset_path + ".zip", '-d', os.path.dirname(args.dataset_path)]
             subprocess.run(command_unzip)
     
-    data_transforms = {
-        "train": transforms.Compose(
-            [
-                transforms.ToTensor(),
-                transforms.Normalize([0.4802, 0.4481, 0.3975], [0.2302, 0.2265, 0.2262]),
-            ]
-        ),
-        "val": transforms.Compose(
-            [
-                transforms.ToTensor(),
-                transforms.Normalize([0.4802, 0.4481, 0.3975], [0.2302, 0.2265, 0.2262]),
-            ]
-        ),
-        "test": transforms.Compose(
-            [
-                transforms.ToTensor(),
-                transforms.Normalize([0.4802, 0.4481, 0.3975], [0.2302, 0.2265, 0.2262]),
-            ]
-        ),
-    }
+    if args.use_transform:
+        data_transforms = {
+            "train": transforms.Compose(
+                [
+                    transforms.ToTensor(),
+                    transforms.Normalize([0.4802, 0.4481, 0.3975], [0.2302, 0.2265, 0.2262]),
+                ]
+            ),
+            "val": transforms.Compose(
+                [
+                    transforms.ToTensor(),
+                    transforms.Normalize([0.4802, 0.4481, 0.3975], [0.2302, 0.2265, 0.2262]),
+                ]
+            ),
+            "test": transforms.Compose(
+                [
+                    transforms.ToTensor(),
+                    transforms.Normalize([0.4802, 0.4481, 0.3975], [0.2302, 0.2265, 0.2262]),
+                ]
+            ),
+        }
+    else:
+        data_transforms = {
+            "train": transforms.Compose(
+                [
+                    transforms.ToTensor(),
+                ]
+            ),
+            "val": transforms.Compose(
+                [
+                    transforms.ToTensor(),
+                ]
+            ),
+            "test": transforms.Compose(
+                [
+                    transforms.ToTensor(),
+                ]
+            ),
+        }        
 
     image_datasets = {
         x: datasets.ImageFolder(os.path.join(args.dataset_path, x), data_transforms[x]) for x in ["train", "val", "test"]
     }
 
+    print(f"Number of workers: {args.num_workers}")
+    print(f"Pin memory: {args.pin_memory}")
+    print(f"Persistent memory: {args.pin_memory}")
+    print(f"Prefetch workers: {args.persistent_workers}")
+    print(f"Use transformes: {args.use_transform}")
+    
     train_loader = torch.utils.data.DataLoader(
         image_datasets["train"],
         batch_size=args.batch_size,
         sampler=DistributedSampler(image_datasets["train"]),
-        num_workers=args.num_workers
+        num_workers=args.num_workers,
+        pin_memory=args.pin_memory,
+        prefetch_factor=args.prefetch_factor,
+        persistent_workers=args.persistent_workers
     )
 
     test_loader = torch.utils.data.DataLoader(
@@ -298,10 +349,11 @@ def main():
 
     for epoch in range(1, args.epochs + 1):
         train(args, model, device, train_loader, epoch, writer)
-        test(model, device, test_loader, writer, epoch)
+        # if dist.get_rank() == 0:
+        #     test(model, device, test_loader, writer, epoch)
 
-    if args.save_model:
-        torch.save(model.state_dict(), "resnet152_cifar10.pt")
+    # if args.save_model:
+    #     torch.save(model.state_dict(), "resnet152_cifar10.pt")
 
 
 if __name__ == "__main__":
