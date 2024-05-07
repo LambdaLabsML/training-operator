@@ -334,7 +334,7 @@ def main():
     train_loader = torch.utils.data.DataLoader(
         image_datasets["train"],
         batch_size=args.batch_size,
-        sampler=DistributedSampler(image_datasets["train"]),
+        #sampler=DistributedSampler(image_datasets["train"]),
         num_workers=args.num_workers,
         pin_memory=args.pin_memory,
         prefetch_factor=args.prefetch_factor,
@@ -344,7 +344,7 @@ def main():
     test_loader = torch.utils.data.DataLoader(
         image_datasets["test"],
         batch_size=args.test_batch_size,
-        sampler=DistributedSampler(image_datasets["test"]),
+        #sampler=DistributedSampler(image_datasets["test"]),
     )
 
     for epoch in range(1, args.epochs + 1):
